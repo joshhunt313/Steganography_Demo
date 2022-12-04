@@ -6,18 +6,17 @@
 #include <cstddef>
 #include <typeinfo>
 
-#define HEADER_SIZE sizeof(int) * 8
+#define HEADER_SIZE 32
 
 OIIO_NAMESPACE_USING
 using namespace std;
 
 int img_width = 500, img_height = 500, channels = 4;
-int hidden_width;
-int hidden_height;
-int hidden_channels;
+int hidden_width = 500, hidden_height = 500, hidden_channels = 4;
 
 unsigned char* pixmap;
 unsigned char* hidden_pixmap;
+unsigned char* test;
 
 ImageBuf readBuffer;
 ImageBuf hiddenBuffer;
@@ -38,16 +37,16 @@ void display()
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     // Handle # of channels
-    switch (channels)
+    switch (hidden_channels)
     {
     case 4:
-        glDrawPixels(img_width, img_height, GL_RGBA, GL_UNSIGNED_BYTE, pixmap);
+        glDrawPixels(hidden_width, hidden_height, GL_RGBA, GL_UNSIGNED_BYTE, test);
         break;
     case 3:
-        glDrawPixels(img_width, img_height, GL_RGB, GL_UNSIGNED_BYTE, pixmap);
+        glDrawPixels(hidden_width, hidden_height, GL_RGB, GL_UNSIGNED_BYTE, test);
         break;
     case 1:
-        glDrawPixels(img_width, img_height, GL_LUMINANCE, GL_UNSIGNED_BYTE, pixmap);
+        glDrawPixels(hidden_width, hidden_height, GL_LUMINANCE, GL_UNSIGNED_BYTE, test);
         break;
     }
         
@@ -70,6 +69,43 @@ void handleReshape(int w, int h)
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluOrtho2D(0, w, 0, h);
+}
+
+
+void decodeImage(unsigned char *buffer) 
+{
+    unsigned int len = 0;
+	for(int i = 0; i < HEADER_SIZE; i++) {
+		len = (len << 2) | (pixmap[i] & 3);
+	}
+    cout << len << endl;
+
+	for(unsigned int i = 0; i < len; i++) {
+		buffer[i/8] = (buffer[i/8] << 2) | (pixmap[i+HEADER_SIZE] & 3);
+	}
+}
+
+void encodeImage() 
+{
+    int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
+    cout << "Input: " << input_pix_len << endl;
+    int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
+    cout << "Hidden: " << hidden_pix_len << endl;
+
+    // Encode hidden length at the beginning of input image
+    for (int i = 0; i < HEADER_SIZE; i++) {
+        pixmap[i] &= 0xFC;
+        pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
+    }
+
+    // Encode hidden image
+    for (unsigned int i = 0; i < hidden_pix_len; i++) {
+        pixmap[i+HEADER_SIZE] &= 0xFC;
+        pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/8] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
+    }
+
+    test = new unsigned char[hidden_pix_len]();
+    decodeImage(test);
 }
 
 
@@ -129,31 +165,7 @@ void readImage(string inputName, string hiddenName)
         hidden_pixmap = new unsigned char[4 * hidden_width * hidden_height * hidden_channels]();
         hiddenBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, hidden_pixmap);
 
-        // int h_index = 0;
-        // int i = 0;
-        // for (i = 0; (i < img_width * img_height * channels) && (h_index < hidden_width * hidden_height * hidden_channels); i += channels-1){
-        //     // cout << pixmap[i] << endl;
-        //     pixmap[i] = (pixmap[i] & 0xFC) | (hidden_pixmap[h_index]);
-        //     if ((i + 1) % channels == 0) h_index++;
-        //     if ((i + 3 >= img_width * img_height * channels) && (h_index < hidden_width * hidden_height * hidden_channels)) cout << "RAN OUT OF SPACE\n";
-        // }
-
-        int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
-        int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
-
-        // Encode hidden length at the beginning of input image
-        for (int i = 0; i < HEADER_SIZE; i++) {
-            pixmap[i] &= 0xFC;
-            pixmap[i] |= (input_pix_len >> (HEADER_SIZE - 1 - i)) & 1UL;
-        }
-
-        // Encode hidden image
-        for (int i = 0; i < hidden_pix_len; i++) {
-            pixmap[i+HEADER_SIZE] &= 0xFC;
-            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 1 - i) % 4)) & 1;
-        }
-
-        // cout << h_index << " : " << i << endl;
+        encodeImage();
     }
 }
 
@@ -186,7 +198,7 @@ int main(int argc, char *argv[])
 
     // create the graphics window, giving width, height, and title text
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
-    glutInitWindowSize(img_width, img_height);
+    glutInitWindowSize(hidden_width, hidden_height);
     glutCreateWindow("Steganography");
 
     // Callback routines
