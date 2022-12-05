@@ -2,9 +2,6 @@
 #include <OpenImageIO/imagebuf.h>
 #include <OpenImageIO/imagebufalgo.h>
 #include <GL/glut.h>
-#include <math.h>
-#include <cstddef>
-#include <typeinfo>
 
 #define HEADER_SIZE 32
 
@@ -74,58 +71,14 @@ void decodeImage(unsigned char *buffer)
 	for(int i = 0; i < HEADER_SIZE; i++) {
 		len = (len << 2) | (pixmap[i] & 3);
 	}
-    cout << "len: " << len << endl;
 
 	for(unsigned int i = 0; i < len; i++) {
 		buffer[i/4] = (buffer[i/4] << 2) | (pixmap[i + HEADER_SIZE] & 3);
 	}
-
-    // for (unsigned int i = 0; i < len; i++) {
-    //     if (int(hidden_pixmap[i] != int(test[i]))) {
-    //         cout << "DIFFERENT @ " << i << endl;
-    //         cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
-    //         if (i == 100000) break;
-    //     }
-    // }
 }
 
-// void encodeImage() 
-// {
-//     int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
-//     cout << "Input: " << input_pix_len << endl;
-//     int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
-//     cout << "Hidden: " << hidden_pix_len << endl;
 
-//     // Encode hidden length at the beginning of input image
-//     for (int i = 0; i < HEADER_SIZE; i++) {
-//         pixmap[i] &= 0xFC;
-//         pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
-//     }
-
-//     // Encode hidden image
-//     for (unsigned int i = 0; i < hidden_pix_len; i++) {
-//         pixmap[i+HEADER_SIZE] &= 0xFC;
-//         pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/8] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
-//         // cout << int(pixmap[i+HEADER_SIZE]) << endl;
-//         // cout << "Test: " << int(pixmap[i+HEADER_SIZE]) << " = " << int(hidden_pixmap[i/8]) << " >> " << (hidden_pix_len - 2 - (i*2)) % 8 << " & 3" << endl;
-        
-//     }
-
-//     test = new unsigned char[hidden_pix_len]();
-//     decodeImage(test);
-
-//     // DEBUGGING
-//     // for (unsigned int i = 0; i < hidden_pix_len; i++) {
-//     //     if (int(hidden_pixmap[i] != int(test[i]))) {
-//     //         cout << "DIFFERENT @ " << i << endl;
-//     //         cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
-//     //         if (i == 100000) break;
-//     //     }
-//     // }
-// }
-
-
-void readImage(string inputName, string hiddenName)
+void encodeImage(string inputName, string hiddenName)
 {
     // Open input image and store
     auto inp = ImageInput::open(inputName);
@@ -138,7 +91,7 @@ void readImage(string inputName, string hiddenName)
     }
     else
     {
-        // Retrieve input image specs
+        // Input image init
         const ImageSpec &spec = inp->spec();
         img_width = spec.width;
         img_height = spec.height;
@@ -151,13 +104,10 @@ void readImage(string inputName, string hiddenName)
         readBuffer.read (0, 0, true, TypeDesc::UINT8);
         readBuffer = ImageBufAlgo::flip(readBuffer);
 
+        // Store read buffer in pixmap
         readBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, pixmap);
 
-        // ROI newReadROI (0, img_width*2, 0, img_height*2, 0, 1, channels);
-        // readBuffer = ImageBufAlgo::resize(readBuffer, "", 0, newReadROI);
-        // img_width *= 2;
-        // img_height *= 2;
-
+        // Hidden image init
         const ImageSpec &h_spec = inp2->spec();
         hidden_width = h_spec.width;
         hidden_height = h_spec.height;
@@ -169,46 +119,31 @@ void readImage(string inputName, string hiddenName)
         hiddenBuffer = ImageBufAlgo::flip(hiddenBuffer);
 
         // Resize hidden image to make smaller to more easily fit in other image
-        // int channelsToRead = 3;
-
-        ROI newROI (0, hidden_width/4, 0, hidden_height/4, 0, 1, hidden_channels);
-        hiddenBuffer = ImageBufAlgo::fit(hiddenBuffer, "", 0, true, newROI);
         hidden_width /= 4;
         hidden_height /= 4;
+        ROI newROI (0, hidden_width, 0, hidden_height, 0, 1, hidden_channels);
+        hiddenBuffer = ImageBufAlgo::fit(hiddenBuffer, "", 0, true, newROI);  
 
-        // Iterate over input image and replace values with hidden pixel values
+        const int hidden_pix_len = 4 * hidden_width * hidden_height * hidden_channels;
+        const int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
 
-        int hidden_pix_len = 4 * hidden_width * hidden_height * hidden_channels;
-        int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
+        // Store hidden buffer inside hidden_pixmap
+        hidden_pixmap = new unsigned char[hidden_pix_len]();
+        hiddenBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, hidden_pixmap);
 
-        hidden_pixmap = new unsigned char[4 * hidden_width * hidden_height * hidden_channels]();
-        hiddenBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, hidden_pixmap);      
-
-        // int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
-        cout << "Input: " << input_pix_len << endl;
-        // int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
-        cout << "Hidden: " << hidden_pix_len << endl;
-
-        // Encode hidden length at the beginning of input image
+        // Encode hidden length at the beginning of input pixmap
         for (int i = 0; i < HEADER_SIZE; i++) {
             pixmap[i] &= 0xFC;
             pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
         }
 
-        // Encode hidden image
+        // Encode hidden image inside the two least significant bits of pixmap
         for (unsigned int i = 0; i < hidden_pix_len; i++) {
             pixmap[i+HEADER_SIZE] &= 0xFC;
-            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
-            // cout << int(pixmap[i+HEADER_SIZE]) << endl;
-            // cout << "Test: " << int(pixmap[i+HEADER_SIZE]) << " = " << int(hidden_pixmap[i/8]) << " >> " << (hidden_pix_len - 2 - (i*2)) % 8 << " & 3" << endl;
-            if (i == 98305) cout << int(pixmap[i+HEADER_SIZE]) << endl;
-        }
+            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3; // i/4 for 2 bits
+        }  
 
-        // for (unsigned int i = 0; i < hidden_pix_len; i++) {
-        //     cout << "i=" << i << ": " << int(hidden_pixmap[i]) << endl;
-        //     if (i == 100000) break;
-        // }      
-
+        // DEBUG
         test = new unsigned char[hidden_pix_len]();
         decodeImage(test);
 
@@ -234,7 +169,7 @@ int main(int argc, char *argv[])
         if (argc == 3) {
             cout << "Improper usage: ./stegan -e <input_image> <hidden_image>\n";
         } else {
-            readImage(argv[2], argv[3]);
+            encodeImage(argv[2], argv[3]);
         }
     } else if (strcmp(argv[1], "-d") == 0) {
         // Decode image
@@ -249,15 +184,15 @@ int main(int argc, char *argv[])
     // Start up the glut utilities
     glutInit(&argc, argv);
 
-    // create the graphics window, giving width, height, and title text
+    // create the graphics window
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
     glutInitWindowSize(hidden_width, hidden_height);
     glutCreateWindow("Steganography");
 
     // Callback routines
-    glutDisplayFunc(display);       // display callback
+    glutDisplayFunc(display);
     // glutKeyboardFunc(handleKey); 
-    glutReshapeFunc(handleReshape); // window resize callback
+    glutReshapeFunc(handleReshape);
 
     glutMainLoop();
 
