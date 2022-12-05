@@ -29,7 +29,7 @@ ImageBuf writeBuffer;
  */
 void display()
 {
-    // Make a nice black background
+    // Make a black background
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -45,12 +45,8 @@ void display()
     case 3:
         glDrawPixels(hidden_width, hidden_height, GL_RGB, GL_UNSIGNED_BYTE, test);
         break;
-    case 1:
-        glDrawPixels(hidden_width, hidden_height, GL_LUMINANCE, GL_UNSIGNED_BYTE, test);
-        break;
     }
         
-
     glFlush();
 }
 
@@ -78,35 +74,55 @@ void decodeImage(unsigned char *buffer)
 	for(int i = 0; i < HEADER_SIZE; i++) {
 		len = (len << 2) | (pixmap[i] & 3);
 	}
-    cout << len << endl;
+    cout << "len: " << len << endl;
 
 	for(unsigned int i = 0; i < len; i++) {
-		buffer[i/8] = (buffer[i/8] << 2) | (pixmap[i+HEADER_SIZE] & 3);
+		buffer[i/4] = (buffer[i/4] << 2) | (pixmap[i + HEADER_SIZE] & 3);
 	}
+
+    // for (unsigned int i = 0; i < len; i++) {
+    //     if (int(hidden_pixmap[i] != int(test[i]))) {
+    //         cout << "DIFFERENT @ " << i << endl;
+    //         cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
+    //         if (i == 100000) break;
+    //     }
+    // }
 }
 
-void encodeImage() 
-{
-    int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
-    cout << "Input: " << input_pix_len << endl;
-    int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
-    cout << "Hidden: " << hidden_pix_len << endl;
+// void encodeImage() 
+// {
+//     int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
+//     cout << "Input: " << input_pix_len << endl;
+//     int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
+//     cout << "Hidden: " << hidden_pix_len << endl;
 
-    // Encode hidden length at the beginning of input image
-    for (int i = 0; i < HEADER_SIZE; i++) {
-        pixmap[i] &= 0xFC;
-        pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
-    }
+//     // Encode hidden length at the beginning of input image
+//     for (int i = 0; i < HEADER_SIZE; i++) {
+//         pixmap[i] &= 0xFC;
+//         pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
+//     }
 
-    // Encode hidden image
-    for (unsigned int i = 0; i < hidden_pix_len; i++) {
-        pixmap[i+HEADER_SIZE] &= 0xFC;
-        pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/8] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
-    }
+//     // Encode hidden image
+//     for (unsigned int i = 0; i < hidden_pix_len; i++) {
+//         pixmap[i+HEADER_SIZE] &= 0xFC;
+//         pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/8] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
+//         // cout << int(pixmap[i+HEADER_SIZE]) << endl;
+//         // cout << "Test: " << int(pixmap[i+HEADER_SIZE]) << " = " << int(hidden_pixmap[i/8]) << " >> " << (hidden_pix_len - 2 - (i*2)) % 8 << " & 3" << endl;
+        
+//     }
 
-    test = new unsigned char[hidden_pix_len]();
-    decodeImage(test);
-}
+//     test = new unsigned char[hidden_pix_len]();
+//     decodeImage(test);
+
+//     // DEBUGGING
+//     // for (unsigned int i = 0; i < hidden_pix_len; i++) {
+//     //     if (int(hidden_pixmap[i] != int(test[i]))) {
+//     //         cout << "DIFFERENT @ " << i << endl;
+//     //         cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
+//     //         if (i == 100000) break;
+//     //     }
+//     // }
+// }
 
 
 void readImage(string inputName, string hiddenName)
@@ -156,16 +172,53 @@ void readImage(string inputName, string hiddenName)
         // int channelsToRead = 3;
 
         ROI newROI (0, hidden_width/4, 0, hidden_height/4, 0, 1, hidden_channels);
-        hiddenBuffer = ImageBufAlgo::resize(hiddenBuffer, "", 0, newROI);
+        hiddenBuffer = ImageBufAlgo::fit(hiddenBuffer, "", 0, true, newROI);
         hidden_width /= 4;
         hidden_height /= 4;
 
         // Iterate over input image and replace values with hidden pixel values
 
-        hidden_pixmap = new unsigned char[4 * hidden_width * hidden_height * hidden_channels]();
-        hiddenBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, hidden_pixmap);
+        int hidden_pix_len = 4 * hidden_width * hidden_height * hidden_channels;
+        int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
 
-        encodeImage();
+        hidden_pixmap = new unsigned char[4 * hidden_width * hidden_height * hidden_channels]();
+        hiddenBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, hidden_pixmap);      
+
+        // int input_pix_len = sizeof(unsigned char) * 4 * img_width * img_height * channels;
+        cout << "Input: " << input_pix_len << endl;
+        // int hidden_pix_len = sizeof(unsigned char) * 4 * hidden_width * hidden_height * hidden_channels;
+        cout << "Hidden: " << hidden_pix_len << endl;
+
+        // Encode hidden length at the beginning of input image
+        for (int i = 0; i < HEADER_SIZE; i++) {
+            pixmap[i] &= 0xFC;
+            pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
+        }
+
+        // Encode hidden image
+        for (unsigned int i = 0; i < hidden_pix_len; i++) {
+            pixmap[i+HEADER_SIZE] &= 0xFC;
+            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3;
+            // cout << int(pixmap[i+HEADER_SIZE]) << endl;
+            // cout << "Test: " << int(pixmap[i+HEADER_SIZE]) << " = " << int(hidden_pixmap[i/8]) << " >> " << (hidden_pix_len - 2 - (i*2)) % 8 << " & 3" << endl;
+            if (i == 98305) cout << int(pixmap[i+HEADER_SIZE]) << endl;
+        }
+
+        // for (unsigned int i = 0; i < hidden_pix_len; i++) {
+        //     cout << "i=" << i << ": " << int(hidden_pixmap[i]) << endl;
+        //     if (i == 100000) break;
+        // }      
+
+        test = new unsigned char[hidden_pix_len]();
+        decodeImage(test);
+
+        for (unsigned int i = 0; i < hidden_pix_len; i++) {
+            if (int(hidden_pixmap[i] != int(test[i]))) {
+                cout << "DIFFERENT @ " << i << endl;
+                cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
+                break;
+            }
+        }
     }
 }
 
