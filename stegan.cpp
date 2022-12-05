@@ -133,14 +133,17 @@ void encodeImage(string inputName, string hiddenName)
 
         // Encode hidden length at the beginning of input pixmap
         for (int i = 0; i < HEADER_SIZE; i++) {
-            pixmap[i] &= 0xFC;
-            pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 3;
+            // Remove the two least significant bits of index
+            pixmap[i] &= 0xFC;  // 0xFC --> 1111 1100
+
+            // Add header size data to LSBs
+            pixmap[i] |= (hidden_pix_len >> (HEADER_SIZE - 2 - (i*2))) & 0x3;   // 0x3 --> 0011
         }
 
         // Encode hidden image inside the two least significant bits of pixmap
         for (unsigned int i = 0; i < hidden_pix_len; i++) {
-            pixmap[i+HEADER_SIZE] &= 0xFC;
-            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 3; // i/4 for 2 bits
+            pixmap[i+HEADER_SIZE] &= 0xFC;  // 0xFC --> 1111 1100
+            pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 0x3; // i/4 for 2 bits
         }  
 
         // DEBUG
