@@ -94,8 +94,15 @@ void readImage(string inputName)
         pixmap = new unsigned char[4 * img_width * img_height * channels]();
 
         readBuffer = ImageBuf(inputName);
-        readBuffer.read (0, 0, true, TypeDesc::UINT8);
+        readBuffer.read(0, 0, true, TypeDesc::UINT8);
+
+        // Eliminate alpha channel if is one
+        readBuffer = ImageBufAlgo::channels(readBuffer, 3, {});
+        channels = 3;
+
         readBuffer = ImageBufAlgo::flip(readBuffer);
+
+        cout << "TEST: " << readBuffer.spec().nchannels << endl;
 
         readBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, pixmap);
     }
@@ -107,8 +114,8 @@ void decodeImage(unsigned char *buffer)
     unsigned int len = 0;
 	for(int i = 0; i < HEADER_SIZE; i++) {
 		len = (len << 2) | (pixmap[i] & 3);
-        cout << endl << (len << 2) << " | " << int(pixmap[i]) << " & 3\n";
-        cout << i << ": " << len << endl;
+        // cout << endl << (len << 2) << " | " << int(pixmap[i]) << " & 3\n";
+        // cout << i << ": " << len << endl;
 	}
 
     cout << "len: " << len << endl; 
