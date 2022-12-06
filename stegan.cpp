@@ -17,7 +17,7 @@ unsigned char* test;
 
 ImageBuf readBuffer;
 ImageBuf hiddenBuffer;
-ImageBuf writeBuffer;
+// ImageBuf writeBuffer;
 
 
 /**
@@ -34,13 +34,15 @@ void display()
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     // Handle # of channels
-    switch (hidden_channels)
+    switch (channels)
     {
     case 4:
-        glDrawPixels(hidden_width, hidden_height, GL_RGBA, GL_UNSIGNED_BYTE, test);
+        glDrawPixels(img_width, img_height, GL_RGBA, GL_UNSIGNED_BYTE, pixmap);
+        // glDrawPixels(hidden_width, hidden_height, GL_RGBA, GL_UNSIGNED_BYTE, hidden_pixmap);
         break;
     case 3:
-        glDrawPixels(hidden_width, hidden_height, GL_RGB, GL_UNSIGNED_BYTE, test);
+        glDrawPixels(img_width, img_height, GL_RGB, GL_UNSIGNED_BYTE, pixmap);
+        // glDrawPixels(hidden_width, hidden_height, GL_RGB, GL_UNSIGNED_BYTE, hidden_pixmap);
         break;
     }
         
@@ -65,12 +67,51 @@ void handleReshape(int w, int h)
 }
 
 
+void writeImage(unsigned char *p_map, string outputName, ImageSpec spec)
+{
+    ImageBuf writeBuffer = ImageBuf(spec, p_map);
+    writeBuffer = ImageBufAlgo::flip(writeBuffer);
+    writeBuffer.write(outputName, TypeDesc::UINT8);
+}
+
+void readImage(string inputName)
+{
+    auto inp = ImageInput::open(inputName);
+    if (!inp)
+    {
+        cout << "File not found. :(\n";
+        exit(-1);
+    }
+    else
+    {
+        // Retrieve image specs
+        const ImageSpec &spec = inp->spec();
+        img_width = spec.width;
+        img_height = spec.height;
+        channels = spec.nchannels;
+        cout << img_width << " x " << img_height << " : " << channels << endl;
+
+        pixmap = new unsigned char[4 * img_width * img_height * channels]();
+
+        readBuffer = ImageBuf(inputName);
+        readBuffer.read (0, 0, true, TypeDesc::UINT8);
+        readBuffer = ImageBufAlgo::flip(readBuffer);
+
+        readBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, pixmap);
+    }
+}
+
+
 void decodeImage(unsigned char *buffer) 
 {
     unsigned int len = 0;
 	for(int i = 0; i < HEADER_SIZE; i++) {
 		len = (len << 2) | (pixmap[i] & 3);
+        cout << endl << (len << 2) << " | " << int(pixmap[i]) << " & 3\n";
+        cout << i << ": " << len << endl;
 	}
+
+    cout << "len: " << len << endl; 
 
 	for(unsigned int i = 0; i < len; i++) {
 		buffer[i/4] = (buffer[i/4] << 2) | (pixmap[i + HEADER_SIZE] & 3);
@@ -81,38 +122,20 @@ void decodeImage(unsigned char *buffer)
 void encodeImage(string inputName, string hiddenName)
 {
     // Open input image and store
-    auto inp = ImageInput::open(inputName);
     auto inp2 = ImageInput::open(hiddenName);
 
-    if (!inp || !inp2)
+    if (!inp2)
     {
         cout << "File not found. :(\n";
         exit(-1);
     }
     else
     {
-        // Input image init
-        const ImageSpec &spec = inp->spec();
-        img_width = spec.width;
-        img_height = spec.height;
-        channels = spec.nchannels;
-        cout << channels << endl;
-
-        pixmap = new unsigned char[4 * img_width * img_height * channels]();
-
-        readBuffer = ImageBuf(inputName);
-        readBuffer.read (0, 0, true, TypeDesc::UINT8);
-        readBuffer = ImageBufAlgo::flip(readBuffer);
-
-        // Store read buffer in pixmap
-        readBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, pixmap);
-
         // Hidden image init
         const ImageSpec &h_spec = inp2->spec();
         hidden_width = h_spec.width;
         hidden_height = h_spec.height;
         hidden_channels = h_spec.nchannels;
-        cout << hidden_channels << endl;
 
         hiddenBuffer = ImageBuf(hiddenName);
         hiddenBuffer.read (0, 0, true, TypeDesc::UINT8);
@@ -142,21 +165,26 @@ void encodeImage(string inputName, string hiddenName)
 
         // Encode hidden image inside the two least significant bits of pixmap
         for (unsigned int i = 0; i < hidden_pix_len; i++) {
+            // Remove two least significant bits of index
             pixmap[i+HEADER_SIZE] &= 0xFC;  // 0xFC --> 1111 1100
+
+            // Add data two LSBs
             pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 0x3; // i/4 for 2 bits
         }  
+
+        cout << "Hidden Length: " << hidden_pix_len << endl;
 
         // DEBUG
         test = new unsigned char[hidden_pix_len]();
         decodeImage(test);
 
-        for (unsigned int i = 0; i < hidden_pix_len; i++) {
-            if (int(hidden_pixmap[i] != int(test[i]))) {
-                cout << "DIFFERENT @ " << i << endl;
-                cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
-                break;
-            }
-        }
+        // for (unsigned int i = 0; i < hidden_pix_len; i++) {
+        //     if (int(hidden_pixmap[i] != int(test[i]))) {
+        //         cout << "DIFFERENT @ " << i << endl;
+        //         cout << int(hidden_pixmap[i]) << " --> " << int(test[i]) << endl;
+        //         break;
+        //     }
+        // }
     }
 }
 
@@ -171,16 +199,23 @@ int main(int argc, char *argv[])
 
         if (argc == 3) {
             cout << "Improper usage: ./stegan -e <input_image> <hidden_image>\n";
+            exit(-1);
         } else {
+            readImage(argv[2]);
             encodeImage(argv[2], argv[3]);
+            writeImage(pixmap, "modified.png", ImageSpec(img_width, img_height, channels, TypeDesc::UINT8));
         }
     } else if (strcmp(argv[1], "-d") == 0) {
         // Decode image
 
         if (argc != 3) {
             cout << "Improper usage: ./stegan -d <input_image>\n";
+            exit(-1);
         } else {
-
+            readImage(argv[2]);
+            unsigned char *temp = new unsigned char[786432]();
+            decodeImage(temp);
+            writeImage(temp, "secret.png", ImageSpec(1024/4, 1024/4, 3, TypeDesc::UINT8));
         }
     }
 
@@ -189,7 +224,7 @@ int main(int argc, char *argv[])
 
     // create the graphics window
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
-    glutInitWindowSize(hidden_width, hidden_height);
+    glutInitWindowSize(img_width, img_height);
     glutCreateWindow("Steganography");
 
     // Callback routines
