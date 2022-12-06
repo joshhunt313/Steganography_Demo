@@ -148,6 +148,10 @@ void encodeImage(string inputName, string hiddenName)
         hiddenBuffer.read (0, 0, true, TypeDesc::UINT8);
         hiddenBuffer = ImageBufAlgo::flip(hiddenBuffer);
 
+        // Eliminate alpha channel if is one
+        hiddenBuffer = ImageBufAlgo::channels(hiddenBuffer, 3, {});
+        hidden_channels = 3;
+
         // Resize hidden image to make smaller to more easily fit in other image
         hidden_width /= 4;
         hidden_height /= 4;
