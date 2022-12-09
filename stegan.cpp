@@ -182,8 +182,8 @@ void encodeImage(string inputName, string hiddenName)
         // cout << "Hidden Length: " << hidden_pix_len << endl;
 
         // DEBUG
-        test = new unsigned char[hidden_pix_len]();
-        decodeImage(test);
+        // test = new unsigned char[hidden_pix_len]();
+        // decodeImage(test);
 
         // for (unsigned int i = 0; i < hidden_pix_len; i++) {
         //     if (int(hidden_pixmap[i] != int(test[i]))) {
