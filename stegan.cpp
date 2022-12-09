@@ -102,8 +102,6 @@ void readImage(string inputName)
 
         readBuffer = ImageBufAlgo::flip(readBuffer);
 
-        cout << "TEST: " << readBuffer.spec().nchannels << endl;
-
         readBuffer.get_pixels(ROI::All(), TypeDesc::UINT8, pixmap);
     }
 }
@@ -114,8 +112,6 @@ void decodeImage(unsigned char *buffer)
     unsigned int len = 0;
 	for(int i = 0; i < HEADER_SIZE; i++) {
 		len = (len << 2) | (pixmap[i] & 3);
-        // cout << endl << (len << 2) << " | " << int(pixmap[i]) << " & 3\n";
-        // cout << i << ": " << len << endl;
 	}
 
     cout << "len: " << len << endl; 
@@ -183,7 +179,7 @@ void encodeImage(string inputName, string hiddenName)
             pixmap[i+HEADER_SIZE] |= (hidden_pixmap[i/4] >> ((hidden_pix_len - 2 - (i*2)) % 8)) & 0x3; // i/4 for 2 bits
         }  
 
-        cout << "Hidden Length: " << hidden_pix_len << endl;
+        // cout << "Hidden Length: " << hidden_pix_len << endl;
 
         // DEBUG
         test = new unsigned char[hidden_pix_len]();
@@ -202,6 +198,8 @@ void encodeImage(string inputName, string hiddenName)
 
 int main(int argc, char *argv[])
 {
+    int width, height;
+
     if (argc != 3 && argc != 4) {
         cout << "Improper usage: ./stegan -e <input_image> <hidden_image>\n\t     OR ./stegan -d <input_image>\n";
         exit(-1);
@@ -224,9 +222,23 @@ int main(int argc, char *argv[])
             exit(-1);
         } else {
             readImage(argv[2]);
-            unsigned char *temp = new unsigned char[786432]();
+            cout << "Secret Image Width: ";
+            cin >> width;
+            cout << "Secret Image Height: ";
+            cin >> height;
+            unsigned char *temp = new unsigned char[width*height*3]();
             decodeImage(temp);
-            writeImage(temp, "secret.png", ImageSpec(1024/4, 1024/4, 3, TypeDesc::UINT8));
+
+            width /= 4;
+            height /= 4;
+            ImageSpec spec(width, height, 3, TypeDesc::UINT8);
+            ImageBuf buf = ImageBuf(spec, temp); 
+
+            writeImage(temp, "secret.png", spec);
+
+            pixmap = temp;
+            img_width = width;
+            img_height = height;
         }
     }
 
@@ -235,7 +247,10 @@ int main(int argc, char *argv[])
 
     // create the graphics window
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
-    glutInitWindowSize(img_width, img_height);
+    if ((strcmp(argv[1], "-e") == 0))
+        glutInitWindowSize(img_width, img_height);
+    else
+        glutInitWindowSize(width, height);
     glutCreateWindow("Steganography");
 
     // Callback routines
